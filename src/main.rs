@@ -1,9 +1,6 @@
 extern crate rand;
 extern crate sdl2;
 
-use sdl2::event::Event;
-use sdl2::image::{InitFlag, LoadTexture};
-use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use sdl2::render::{Canvas, Texture, TextureCreator};
@@ -22,22 +19,21 @@ const GAME_HEIGHT: usize = 40;
 const HIGHSCORE_FILE: &'static str = "scores.txt";
 const NUM_HIGHSCORES: usize = 5;
 
-#[derive(Clone, Copy)]
-enum TextureColor {
-    Green,
-    Blue,
-}
-
 fn main() {
     let mut tetrs = game::Game::new();
     let mut timer = SystemTime::now();
     let sdl_ctx = sdl2::init().expect("Failed to initialize SDL");
+    let ttf_ctx = sdl2::ttf::init().expect("SDL TTF init failed");
     let video_subsystem = sdl_ctx
         .video()
         .expect("Failed to initialize video subsystem");
 
-    let width = 600;
+    let width = 1200;
     let height = 800;
+
+    let font = ttf_ctx
+        .load_font("assets/ponde___.ttf", 128)
+        .expect("Failed to load font");
 
     let mut event_pump = sdl_ctx.event_pump().expect("Failed to get SDL event pump");
 
@@ -209,9 +205,78 @@ fn main() {
                     .expect("Couldn't copy texture to canvas");
             }
         }
+
+        display_game_info(
+            &tetrs,
+            &mut canvas,
+            &texture_creator,
+            &font,
+            width as i32 - grid_x + 15,
+        );
+
         canvas.present();
         sleep(Duration::new(0, 1_000_000_000u32 / 60));
     }
+}
+
+fn create_texture_from_text<'a>(
+    texture_creator: &'a TextureCreator<WindowContext>,
+    font: &sdl2::ttf::Font,
+    text: &str,
+    r: u8,
+    g: u8,
+    b: u8,
+) -> Option<Texture<'a>> {
+    if let Ok(surface) = font.render(text).blended(Color::RGB(r, g, b)) {
+        texture_creator.create_texture_from_surface(&surface).ok()
+    } else {
+        None
+    }
+}
+
+fn get_rect_from_text(text: &str, x: i32, y: i32) -> Option<Rect> {
+    Some(Rect::new(x, y, text.len() as u32 * 20, 30))
+}
+
+fn display_game_info<'a>(
+    tetrs: &game::Game,
+    canvas: &mut Canvas<Window>,
+    texture_creator: &'a TextureCreator<WindowContext>,
+    font: &sdl2::ttf::Font,
+    start_point: i32,
+) {
+    let score_text = format!("SCORE: {}", tetrs.score);
+    let lines_text = format!("LINES: {}", tetrs.num_lines);
+    let level_text = format!("LEVEL: {}", tetrs.current_level);
+
+    let score = create_texture_from_text(&texture_creator, &font, &score_text, 255, 255, 255)
+        .expect("Cannot render text");
+    let lines = create_texture_from_text(&texture_creator, &font, &lines_text, 255, 255, 255)
+        .expect("Cannot render text");
+    let level = create_texture_from_text(&texture_creator, &font, &level_text, 255, 255, 255)
+        .expect("Cannot render text");
+
+    canvas
+        .copy(
+            &score,
+            None,
+            get_rect_from_text(&score_text, start_point, 90),
+        )
+        .expect("couldn't opy text");
+    canvas
+        .copy(
+            &lines,
+            None,
+            get_rect_from_text(&score_text, start_point, 125),
+        )
+        .expect("couldn't opy text");
+    canvas
+        .copy(
+            &level,
+            None,
+            get_rect_from_text(&score_text, start_point, 160),
+        )
+        .expect("couldn't opy text");
 }
 
 pub fn print_game_info(game: &game::Game) {
@@ -278,7 +343,7 @@ fn line_to_slice(line: &str) -> Vec<u32> {
 }
 
 fn load_highscores_and_lines() -> Option<(Vec<u32>, Vec<u32>)> {
-    if let Ok(content) = read_from_file("scores.txt") {
+    if let Ok(content) = read_from_file(HIGHSCORE_FILE) {
         let mut lines = content
             .splitn(2, "\n")
             .map(|line| line_to_slice(line))
@@ -297,7 +362,7 @@ fn load_highscores_and_lines() -> Option<(Vec<u32>, Vec<u32>)> {
 fn save_highscore_and_lines(highscores: &[u32], lines: &[u32]) -> bool {
     let s_highscores = slice_to_string(highscores);
     let s_lines = slice_to_string(lines);
-    write_into_file(&format!("{}\n{}\n", s_highscores, s_lines), "scores.txt").is_ok()
+    write_into_file(&format!("{}\n{}\n", s_highscores, s_lines), HIGHSCORE_FILE).is_ok()
 }
 
 fn write_into_file(content: &str, filename: &str) -> io::Result<()> {
